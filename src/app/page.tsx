@@ -10,6 +10,7 @@ import { Lang, t } from "@/lib/i18n";
 import { motion } from "framer-motion";
 import { Sparkles } from "lucide-react";
 import Link from "next/link";
+export const dynamic = "force-dynamic";
 
 export default function HomePage() {
   const [lang, setLang] = useState<Lang>("es");
