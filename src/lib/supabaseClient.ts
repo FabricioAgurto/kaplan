@@ -1,9 +1,14 @@
-import { createClient } from "@supabase/supabase-js";
+// src/lib/supabaseClient.ts
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
-export const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  {
-    realtime: { params: { eventsPerSecond: 10 } },
-  }
-);
+let _client: SupabaseClient | null = null;
+
+export function getSupabaseClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!url || !key) return null;
+
+  if (!_client) _client = createClient(url, key);
+  return _client;
+}
