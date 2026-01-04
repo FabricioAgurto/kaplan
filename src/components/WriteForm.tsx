@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { getSupabaseClient } from "@/lib/supabaseClient";
 import { Lang, t } from "@/lib/i18n";
 import { Mood } from "@/lib/types";
 import { MoodChips } from "./MoodChips";
@@ -29,6 +29,8 @@ export function WriteForm({
   onDone: () => void;
 }) {
   const copy = t(lang);
+
+  const supabase = getSupabaseClient(); // ✅ aquí
 
   const [name, setName] = useState("");
   const [message, setMessage] = useState("");
@@ -64,8 +66,19 @@ export function WriteForm({
     setPreview(URL.createObjectURL(f));
   };
 
-  const uploadPhotoIfAny = async (): Promise<{ photo_path: string | null; photo_url: string | null }> => {
+  const uploadPhotoIfAny = async (): Promise<{
+    photo_path: string | null;
+    photo_url: string | null;
+  }> => {
     if (!file) return { photo_path: null, photo_url: null };
+
+    if (!supabase) {
+      throw new Error(
+        lang === "es"
+          ? "Falta configurar Supabase (env vars)."
+          : "Supabase not configured (env vars)."
+      );
+    }
 
     const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
     const safeExt = ["jpg", "jpeg", "png", "webp"].includes(ext) ? ext : "jpg";
@@ -97,6 +110,15 @@ export function WriteForm({
     }
     if (!message.trim() && !file) {
       setError(copy.emptyGuard);
+      return;
+    }
+
+    if (!supabase) {
+      setError(
+        lang === "es"
+          ? "Falta configurar Supabase (NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY)."
+          : "Supabase not configured (NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY)."
+      );
       return;
     }
 
@@ -132,11 +154,29 @@ export function WriteForm({
     }
   };
 
+  // ✅ opcional: deshabilita envío si no hay supabase
+  const disabledByConfig = !supabase;
+
   return (
     <div className="space-y-4">
       {error && (
         <div className="glass rounded-2xl p-3 border border-rose-400/20 bg-rose-500/10">
           <div className="text-sm text-rose-100/90">{error}</div>
+        </div>
+      )}
+
+      {disabledByConfig && (
+        <div className="glass rounded-2xl p-3 border border-white/10 bg-white/5">
+          <div className="text-sm text-white/80">
+            {lang === "es"
+              ? "Supabase no está configurado en el hosting."
+              : "Supabase is not configured on the hosting."}
+          </div>
+          <div className="text-xs text-white/60 mt-1">
+            {lang === "es"
+              ? "Agrega NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY en Environment Variables."
+              : "Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in Environment Variables."}
+          </div>
         </div>
       )}
 
@@ -169,9 +209,7 @@ export function WriteForm({
           }
           maxLength={600}
         />
-        <div className="mt-1 text-xs text-white/45">
-          {message.length}/600
-        </div>
+        <div className="mt-1 text-xs text-white/45">{message.length}/600</div>
       </div>
 
       <div>
@@ -192,9 +230,7 @@ export function WriteForm({
               {lang === "es" ? "Quitar" : "Remove"}
             </button>
           )}
-          <div className="text-xs text-white/55">
-            JPG/PNG/WEBP • {MAX_MB}MB
-          </div>
+          <div className="text-xs text-white/55">JPG/PNG/WEBP • {MAX_MB}MB</div>
         </div>
 
         {preview && (
@@ -206,11 +242,14 @@ export function WriteForm({
       </div>
 
       <motion.button
-        className={`btn btn-primary w-full py-3 text-base ${!canSend || loading ? "opacity-60" : ""}`}
+        className={`btn btn-primary w-full py-3 text-base ${
+          !canSend || loading || disabledByConfig ? "opacity-60" : ""
+        }`}
         onClick={submit}
-        disabled={!canSend || loading}
+        disabled={!canSend || loading || disabledByConfig}
         whileTap={{ scale: 0.99 }}
         type="button"
+        title={disabledByConfig ? "Supabase not configured" : undefined}
       >
         <Sparkles size={16} />
         {loading ? copy.sending : copy.send}
