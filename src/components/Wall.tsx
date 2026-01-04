@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { getSupabaseClient } from "@/lib/supabaseClient";
 import { FarewellMessage, ReactionCount, Reaction } from "@/lib/types";
 import { MessageCard } from "./MessageCard";
 import { Lang, t } from "@/lib/i18n";
@@ -25,6 +25,8 @@ function sumCounts(c: ReactionCount) {
 export function Wall({ lang }: { lang: Lang }) {
   const copy = t(lang);
 
+  const supabase = getSupabaseClient(); // ✅ aquí
+
   const [messages, setMessages] = useState<FarewellMessage[]>([]);
   const [countsMap, setCountsMap] = useState<Record<string, ReactionCount>>({});
   const [sort, setSort] = useState<SortMode>("newest");
@@ -35,9 +37,9 @@ export function Wall({ lang }: { lang: Lang }) {
   const [hasMore, setHasMore] = useState(true);
 
   const fetchReactionsForMessageIds = async (ids: string[]) => {
+    if (!supabase) return; // ✅
     if (ids.length === 0) return;
 
-    // Trae todas las reacciones de esos mensajes (no un limit random)
     const { data: reacts, error } = await supabase
       .from("farewell_reactions")
       .select("message_id,reaction")
@@ -57,6 +59,8 @@ export function Wall({ lang }: { lang: Lang }) {
   };
 
   const loadPage = async (nextPage: number, mode: "replace" | "append") => {
+    if (!supabase) return; // ✅
+
     setLoading(true);
 
     const from = nextPage * PAGE_SIZE;
@@ -79,7 +83,6 @@ export function Wall({ lang }: { lang: Lang }) {
       setPage(nextPage);
     } else {
       setMessages((prev) => {
-        // evita duplicados por si realtime insertó alguno ya
         const seen = new Set(prev.map((m) => m.id));
         const merged = [...prev];
         for (const m of newMsgs) {
@@ -92,15 +95,15 @@ export function Wall({ lang }: { lang: Lang }) {
 
     setHasMore(newMsgs.length === PAGE_SIZE);
 
-    // Carga reacciones SOLO para esos mensajes
     await fetchReactionsForMessageIds(newMsgs.map((m) => m.id));
   };
 
   useEffect(() => {
+    if (!supabase) return; // ✅ evita crash en build / envs vacías
+
     // carga inicial
     loadPage(0, "replace");
 
-    // Realtime: messages (solo prepend)
     const ch1 = supabase
       .channel("farewell_messages_live")
       .on(
@@ -110,12 +113,10 @@ export function Wall({ lang }: { lang: Lang }) {
           const row = payload.new as FarewellMessage;
 
           setMessages((prev) => {
-            // evita duplicados
             if (prev.some((m) => m.id === row.id)) return prev;
             return [row, ...prev];
           });
 
-          // inicializa counts si no existe
           setCountsMap((prev) => {
             if (prev[row.id]) return prev;
             return { ...prev, [row.id]: emptyCounts() };
@@ -124,7 +125,6 @@ export function Wall({ lang }: { lang: Lang }) {
       )
       .subscribe();
 
-    // Realtime: reactions (incremental)
     const ch2 = supabase
       .channel("farewell_reactions_live")
       .on(
@@ -151,7 +151,7 @@ export function Wall({ lang }: { lang: Lang }) {
       supabase.removeChannel(ch2);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [supabase]);
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -177,6 +177,22 @@ export function Wall({ lang }: { lang: Lang }) {
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
   }, [filtered, sort, countsMap]);
+
+  // ✅ Si falta config, muestra UI bonita en vez de romper
+  if (!supabase) {
+    return (
+      <div className="glass rounded-2xl p-4 border border-white/10">
+        <div className="text-sm text-white/80 font-semibold">
+          {lang === "es" ? "Falta configurar Supabase" : "Supabase not configured"}
+        </div>
+        <div className="text-xs text-white/60 mt-1">
+          {lang === "es"
+            ? "Agrega NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY en las Environment Variables de tu hosting."
+            : "Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in your hosting environment variables."}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -224,7 +240,13 @@ export function Wall({ lang }: { lang: Lang }) {
             disabled={loading}
             type="button"
           >
-            {loading ? (lang === "es" ? "Cargando..." : "Loading...") : (lang === "es" ? "Cargar más" : "Load more")}
+            {loading
+              ? lang === "es"
+                ? "Cargando..."
+                : "Loading..."
+              : lang === "es"
+                ? "Cargar más"
+                : "Load more"}
           </button>
         )}
       </div>
