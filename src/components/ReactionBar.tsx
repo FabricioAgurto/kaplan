@@ -1,6 +1,6 @@
 "use client";
 
-import { supabase } from "@/lib/supabaseClient";
+import { getSupabaseClient } from "@/lib/supabaseClient";
 import { Reaction, ReactionCount } from "@/lib/types";
 import { motion } from "framer-motion";
 
