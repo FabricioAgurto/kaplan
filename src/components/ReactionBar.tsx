@@ -21,9 +21,14 @@ export function ReactionBar({
   counts: ReactionCount;
   onLocalBump: (r: Reaction) => void;
 }) {
+  const supabase = getSupabaseClient(); // ✅ acá
+
   const addReaction = async (r: Reaction) => {
     // instant UI bump
     onLocalBump(r);
+
+    // si no hay env vars / no hay supabase, no rompas
+    if (!supabase) return;
 
     // store reaction
     await supabase.from("farewell_reactions").insert({
@@ -41,6 +46,8 @@ export function ReactionBar({
           whileTap={{ scale: 0.98 }}
           onClick={() => addReaction(r.key)}
           type="button"
+          disabled={!supabase}              // ✅ opcional
+          title={!supabase ? "Supabase not configured" : undefined} // ✅ opcional
         >
           <span className="text-base">{r.label}</span>
           <span className="text-xs text-white/70">{counts[r.key] ?? 0}</span>
